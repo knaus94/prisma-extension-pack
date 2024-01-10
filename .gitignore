@@ -1,0 +1,11 @@
+# Dependency directories
+node_modules/
+
+dist/
+var/
+
+# dotenv environment variable files
+.env
+
+*.tgz
+dev.db
