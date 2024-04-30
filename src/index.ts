@@ -1,5 +1,10 @@
 import { Prisma } from "@prisma/client/extension";
 
+type Pagination = {
+  take?: number;
+  skip?: number;
+};
+
 export default () => {
   return Prisma.defineExtension({
     name: "pack",
@@ -84,10 +89,14 @@ export default () => {
 
         async paginate<T, A>(
           this: T,
-          args?: Prisma.Exact<A, Prisma.Args<T, "findMany">>
+          args?: Prisma.Exact<A, Prisma.Args<T, "findMany">> & {
+            pagination?: Pagination;
+          }
         ) {
           const context = Prisma.getExtensionContext(this);
-          const { take, skip, ...operationArgs } = (args ?? {}) as any;
+          const { pagination, ...operationArgs } = (args ?? {}) as any;
+          const take = args?.pagination?.take ?? operationArgs?.take ?? 10;
+          const skip = args?.pagination?.skip ?? operationArgs?.skip ?? 0;
 
           const [data, total]: [Prisma.Result<T, A, "findMany">, number] =
             await Promise.all([
