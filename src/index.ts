@@ -1,97 +1,13 @@
 import { Prisma as PrismaExtension } from "@prisma/client/extension";
-import { backOff, IBackOffOptions } from "exponential-backoff";
-
-const ROLLBACK = { [Symbol.for("prisma.client.extension.rollback")]: true };
 
 type Pagination = {
   take?: number;
   skip?: number;
 };
 
-export function RetryTransactions(options?: Partial<IBackOffOptions>) {
-  return PrismaExtension.defineExtension((prisma) =>
-    prisma.$extends({
-      client: {
-        $transaction(...args: any) {
-          return backOff(() => prisma.$transaction.apply(prisma, args), {
-            retry: (e) => {
-              // Retry the transaction only if the error was due to a write conflict or deadlock
-              // See: https://www.prisma.io/docs/reference/api-reference/error-reference#p2034
-              return e?.code === "P2034";
-            },
-            ...options,
-          });
-        },
-      } as { $transaction: (typeof prisma)["$transaction"] },
-    })
-  );
-}
-
 export default () => {
   return PrismaExtension.defineExtension({
     name: "pack",
-    client: {
-      async $begin() {
-        const prisma = PrismaExtension.getExtensionContext(this);
-        let setTxClient: (txClient: PrismaExtension.TransactionClient) => void;
-        let commit: () => void;
-        let rollback: () => void;
-
-        // a promise for getting the tx inner client
-        const txClient = new Promise<PrismaExtension.TransactionClient>(
-          (res) => {
-            setTxClient = (txClient) => res(txClient);
-          }
-        );
-
-        // a promise for controlling the transaction
-        const txPromise = new Promise((_res, _rej) => {
-          commit = () => _res(undefined);
-          rollback = () => _rej(ROLLBACK);
-        });
-
-        // opening a transaction to control externally
-        if (
-          "$transaction" in prisma &&
-          typeof prisma.$transaction === "function"
-        ) {
-          const tx = prisma.$transaction((txClient: any) => {
-            setTxClient(
-              txClient as unknown as PrismaExtension.TransactionClient
-            );
-
-            return txPromise.catch((e) => {
-              if (e === ROLLBACK) return;
-              throw e;
-            });
-          });
-
-          // return a proxy TransactionClient with `$commit` and `$rollback` methods
-          return new Proxy(await txClient, {
-            get(target, prop) {
-              if (prop === "$commit") {
-                return () => {
-                  commit();
-                  return tx;
-                };
-              }
-              if (prop === "$rollback") {
-                return () => {
-                  rollback();
-                  return tx;
-                };
-              }
-              return target[prop as keyof typeof target];
-            },
-          }) as PrismaExtension.TransactionClient & {
-            $commit: () => Promise<void>;
-            $rollback: () => Promise<void>;
-          };
-        }
-
-        throw new Error("Transactions are not supported by this client");
-      },
-    },
     model: {
       $allModels: {
         async findRandom<T, A>(
