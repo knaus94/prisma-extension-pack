@@ -1,11 +1,5 @@
 import { Prisma as PrismaExtension } from "@prisma/client/extension";
 import { backOff, IBackOffOptions } from "exponential-backoff";
-import { Prisma } from "@prisma/client";
-
-type FlatTransactionClient = Prisma.TransactionClient & {
-  $commit: () => Promise<void>;
-  $rollback: () => Promise<void>;
-};
 
 const ROLLBACK = { [Symbol.for("prisma.client.extension.rollback")]: true };
 
@@ -15,7 +9,7 @@ type Pagination = {
 };
 
 export function RetryTransactions(options?: Partial<IBackOffOptions>) {
-  return Prisma.defineExtension((prisma) =>
+  return PrismaExtension.defineExtension((prisma) =>
     prisma.$extends({
       client: {
         $transaction(...args: any) {
@@ -38,15 +32,17 @@ export default () => {
     name: "pack",
     client: {
       async $begin() {
-        const prisma = Prisma.getExtensionContext(this);
-        let setTxClient: (txClient: Prisma.TransactionClient) => void;
+        const prisma = PrismaExtension.getExtensionContext(this);
+        let setTxClient: (txClient: PrismaExtension.TransactionClient) => void;
         let commit: () => void;
         let rollback: () => void;
 
         // a promise for getting the tx inner client
-        const txClient = new Promise<Prisma.TransactionClient>((res) => {
-          setTxClient = (txClient) => res(txClient);
-        });
+        const txClient = new Promise<PrismaExtension.TransactionClient>(
+          (res) => {
+            setTxClient = (txClient) => res(txClient);
+          }
+        );
 
         // a promise for controlling the transaction
         const txPromise = new Promise((_res, _rej) => {
@@ -60,7 +56,9 @@ export default () => {
           typeof prisma.$transaction === "function"
         ) {
           const tx = prisma.$transaction((txClient: any) => {
-            setTxClient(txClient as unknown as Prisma.TransactionClient);
+            setTxClient(
+              txClient as unknown as PrismaExtension.TransactionClient
+            );
 
             return txPromise.catch((e) => {
               if (e === ROLLBACK) return;
@@ -85,7 +83,10 @@ export default () => {
               }
               return target[prop as keyof typeof target];
             },
-          }) as FlatTransactionClient;
+          }) as PrismaExtension.TransactionClient & {
+            $commit: () => Promise<void>;
+            $rollback: () => Promise<void>;
+          };
         }
 
         throw new Error("Transactions are not supported by this client");
