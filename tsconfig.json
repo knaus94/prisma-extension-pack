@@ -1,7 +1,9 @@
 {
   "compilerOptions": {
     "target": "es2016",
-    "lib": ["ES2016"],
+    "lib": [
+      "ES2016"
+    ],
     "module": "CommonJS",
     "moduleResolution": "node",
     "esModuleInterop": true,
@@ -10,7 +12,10 @@
     "skipDefaultLibCheck": true,
     "skipLibCheck": false,
     "declaration": true,
-    "outDir": "./dist"
+    "outDir": "./dist",
+    "useUnknownInCatchVariables": false
   },
-  "include": ["src/**/*.ts"]
+  "include": [
+    "src/**/*.ts"
+  ]
 }
